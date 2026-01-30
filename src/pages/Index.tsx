@@ -15,8 +15,10 @@ interface GameState {
 }
 
 const CHICKEN_PRICE = 1;
+const CHICKENS_PER_TON = 3000;
 const EGG_PRODUCTION_RATE = 0.014;
 const COLLECT_INTERVAL = 3600000;
+const EGGS_FOR_HATCH = 100;
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>('farm');
@@ -84,7 +86,7 @@ export default function Index() {
       return;
     }
 
-    const eggsProduced = gameState.chickens * (EGG_PRODUCTION_RATE * 60);
+    const eggsProduced = gameState.chickens * EGG_PRODUCTION_RATE;
     setGameState(prev => ({
       ...prev,
       eggs: prev.eggs + eggsProduced,
@@ -101,38 +103,37 @@ export default function Index() {
 
     setGameState(prev => ({
       ...prev,
-      chickens: prev.chickens + 1,
+      chickens: prev.chickens + CHICKENS_PER_TON,
       balance: prev.balance - CHICKEN_PRICE,
       lastCollect: prev.chickens === 0 ? Date.now() : prev.lastCollect,
     }));
-    toast.success('Курица куплена!');
+    toast.success(`Куплено ${CHICKENS_PER_TON} кур!`);
   };
 
   const sellEggs = () => {
-    if (gameState.eggs < 1) {
-      toast.error('У вас недостаточно яиц для продажи');
+    if (gameState.eggs < EGGS_FOR_HATCH) {
+      toast.error(`Минимум ${EGGS_FOR_HATCH} яиц для продажи`);
       return;
     }
 
-    const tonAmount = gameState.eggs * 0.1;
+    const tonAmount = gameState.eggs * 0.01;
     setGameState(prev => ({
       ...prev,
       eggs: 0,
       balance: prev.balance + tonAmount,
     }));
-    toast.success(`Продано яиц за ${tonAmount.toFixed(2)} TON!`);
+    toast.success(`Продано ${gameState.eggs.toFixed(2)} яиц за ${tonAmount.toFixed(2)} TON!`);
   };
 
   const hatchEggs = () => {
-    const eggsNeeded = 10;
-    if (gameState.eggs < eggsNeeded) {
-      toast.error(`Нужно ${eggsNeeded} яиц для вывода курицы`);
+    if (gameState.eggs < EGGS_FOR_HATCH) {
+      toast.error(`Нужно ${EGGS_FOR_HATCH} яиц для вывода курицы`);
       return;
     }
 
     setGameState(prev => ({
       ...prev,
-      eggs: prev.eggs - eggsNeeded,
+      eggs: prev.eggs - EGGS_FOR_HATCH,
       chickens: prev.chickens + 1,
     }));
     toast.success('Из яиц вылупилась новая курица!');
@@ -144,7 +145,7 @@ export default function Index() {
     toast.success('Адрес кошелька скопирован!');
   };
 
-  const eggPerHour = gameState.chickens * (EGG_PRODUCTION_RATE * 60);
+  const eggPerHour = gameState.chickens * EGG_PRODUCTION_RATE;
 
   return (
     <div className="min-h-screen w-full relative overflow-hidden">
@@ -216,7 +217,7 @@ export default function Index() {
                   onClick={sellEggs}
                   variant="secondary"
                   className="h-14 font-semibold shadow-md hover:scale-105 transition-transform"
-                  disabled={gameState.eggs < 1}
+                  disabled={gameState.eggs < EGGS_FOR_HATCH}
                 >
                   <Icon name="DollarSign" className="mr-2" size={20} />
                   Продать яйца
@@ -225,10 +226,10 @@ export default function Index() {
                   onClick={hatchEggs}
                   variant="outline"
                   className="h-14 font-semibold shadow-md hover:scale-105 transition-transform border-2"
-                  disabled={gameState.eggs < 10}
+                  disabled={gameState.eggs < EGGS_FOR_HATCH}
                 >
                   <Icon name="Plus" className="mr-2" size={20} />
-                  Вывести курицу (10🥚)
+                  Вывести курицу ({EGGS_FOR_HATCH}🥚)
                 </Button>
               </div>
             </div>
@@ -242,8 +243,8 @@ export default function Index() {
                   <div className="flex items-center gap-3">
                     <div className="text-6xl">🐔</div>
                     <div>
-                      <p className="text-lg font-bold">Курица</p>
-                      <p className="text-sm text-muted-foreground">+{(EGG_PRODUCTION_RATE * 60).toFixed(3)} яиц/ч</p>
+                      <p className="text-lg font-bold">Пакет кур</p>
+                      <p className="text-sm text-muted-foreground">{CHICKENS_PER_TON} кур × {EGG_PRODUCTION_RATE} яиц/ч</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -256,7 +257,7 @@ export default function Index() {
                   disabled={gameState.balance < CHICKEN_PRICE}
                 >
                   <Icon name="ShoppingCart" className="mr-2" size={20} />
-                  Купить курицу
+                  Купить {CHICKENS_PER_TON} кур
                 </Button>
               </Card>
             </div>
