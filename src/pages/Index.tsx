@@ -4,7 +4,16 @@ import { Card } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 
-type Tab = 'farm' | 'shop' | 'wallet';
+type Tab = 'farm' | 'shop' | 'wallet' | 'market';
+
+interface MarketOrder {
+  id: number;
+  userId: string;
+  eggsAmount: number;
+  pricePerEgg: number;
+  totalPrice: number;
+  createdAt: string;
+}
 
 interface GameState {
   chickens: number;
@@ -30,6 +39,9 @@ export default function Index() {
     userId: '',
   });
   const [timeUntilCollect, setTimeUntilCollect] = useState(0);
+  const [marketOrders, setMarketOrders] = useState<MarketOrder[]>([]);
+  const [sellPrice, setSellPrice] = useState(0.01);
+  const MARKETPLACE_URL = 'https://functions.poehali.dev/00dcf964-93e1-4b2b-bde4-9d382e43cba0';
 
   useEffect(() => {
     const saved = localStorage.getItem('kuryatnik_game');
@@ -45,6 +57,22 @@ export default function Index() {
   useEffect(() => {
     localStorage.setItem('kuryatnik_game', JSON.stringify(gameState));
   }, [gameState]);
+
+  useEffect(() => {
+    if (activeTab === 'market') {
+      fetchMarketOrders();
+    }
+  }, [activeTab]);
+
+  const fetchMarketOrders = async () => {
+    try {
+      const response = await fetch(`${MARKETPLACE_URL}?action=list`);
+      const data = await response.json();
+      setMarketOrders(data.orders || []);
+    } catch (error) {
+      console.error('Error fetching market orders:', error);
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -110,19 +138,74 @@ export default function Index() {
     toast.success(`Куплено ${CHICKENS_PER_TON} кур!`);
   };
 
-  const sellEggs = () => {
+  const sellEggs = async () => {
     if (gameState.eggs < EGGS_FOR_HATCH) {
       toast.error(`Минимум ${EGGS_FOR_HATCH} яиц для продажи`);
       return;
     }
 
-    const tonAmount = gameState.eggs * 0.01;
-    setGameState(prev => ({
-      ...prev,
-      eggs: 0,
-      balance: prev.balance + tonAmount,
-    }));
-    toast.success(`Продано ${gameState.eggs.toFixed(2)} яиц за ${tonAmount.toFixed(2)} TON!`);
+    try {
+      const response = await fetch(MARKETPLACE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          userId: gameState.userId,
+          eggsAmount: gameState.eggs,
+          pricePerEgg: sellPrice,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setGameState(prev => ({
+          ...prev,
+          eggs: 0,
+        }));
+        toast.success(`${gameState.eggs.toFixed(2)} яиц выставлено на продажу!`);
+        if (activeTab === 'market') {
+          fetchMarketOrders();
+        }
+      } else {
+        toast.error('Ошибка при создании заказа');
+      }
+    } catch (error) {
+      toast.error('Ошибка соединения с рынком');
+    }
+  };
+
+  const buyEggs = async (orderId: number, totalPrice: number, eggsAmount: number) => {
+    if (gameState.balance < totalPrice) {
+      toast.error('Недостаточно TON!');
+      return;
+    }
+
+    try {
+      const response = await fetch(MARKETPLACE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'buy',
+          orderId,
+          buyerId: gameState.userId,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setGameState(prev => ({
+          ...prev,
+          eggs: prev.eggs + eggsAmount,
+          balance: prev.balance - totalPrice,
+        }));
+        toast.success(`Куплено ${eggsAmount} яиц!`);
+        fetchMarketOrders();
+      } else {
+        toast.error(data.error || 'Ошибка при покупке');
+      }
+    } catch (error) {
+      toast.error('Ошибка соединения с рынком');
+    }
   };
 
   const hatchEggs = () => {
@@ -214,13 +297,13 @@ export default function Index() {
 
               <div className="grid grid-cols-2 gap-3">
                 <Button 
-                  onClick={sellEggs}
+                  onClick={() => setActiveTab('market')}
                   variant="secondary"
                   className="h-14 font-semibold shadow-md hover:scale-105 transition-transform"
                   disabled={gameState.eggs < EGGS_FOR_HATCH}
                 >
-                  <Icon name="DollarSign" className="mr-2" size={20} />
-                  Продать яйца
+                  <Icon name="ShoppingBag" className="mr-2" size={20} />
+                  Продать на рынке
                 </Button>
                 <Button 
                   onClick={hatchEggs}
@@ -259,6 +342,75 @@ export default function Index() {
                   <Icon name="ShoppingCart" className="mr-2" size={20} />
                   Купить {CHICKENS_PER_TON} кур
                 </Button>
+              </Card>
+            </div>
+          )}
+
+          {activeTab === 'market' && (
+            <div className="space-y-4 animate-fade-in">
+              <Card className="bg-white/95 backdrop-blur-md p-6 shadow-2xl">
+                <h2 className="text-2xl mb-4 text-center">Рынок яиц</h2>
+                
+                {gameState.eggs >= EGGS_FOR_HATCH && (
+                  <div className="mb-6 p-4 bg-secondary/50 rounded-xl">
+                    <p className="text-sm font-semibold mb-2">Продать свои яйца:</p>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="number"
+                        value={sellPrice}
+                        onChange={(e) => setSellPrice(parseFloat(e.target.value))}
+                        step="0.001"
+                        min="0.001"
+                        className="flex-1 px-3 py-2 rounded-lg border-2 border-border"
+                        placeholder="Цена за 1 яйцо"
+                      />
+                      <span className="flex items-center px-3 bg-white rounded-lg font-mono">
+                        {(gameState.eggs * sellPrice).toFixed(3)} TON
+                      </span>
+                    </div>
+                    <Button 
+                      onClick={sellEggs}
+                      className="w-full"
+                    >
+                      Выставить {gameState.eggs.toFixed(2)} яиц
+                    </Button>
+                  </div>
+                )}
+
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {marketOrders.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">Пока нет предложений</p>
+                  ) : (
+                    marketOrders.map((order) => (
+                      <div key={order.id} className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border-2 border-orange-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Продавец: {order.userId.substring(0, 12)}...</p>
+                            <p className="text-2xl font-bold">{order.eggsAmount} 🥚</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-muted-foreground">{order.pricePerEgg.toFixed(4)} TON/шт</p>
+                            <p className="text-xl font-bold text-primary">{order.totalPrice.toFixed(3)} TON</p>
+                          </div>
+                        </div>
+                        {order.userId !== gameState.userId && (
+                          <Button
+                            onClick={() => buyEggs(order.id, order.totalPrice, order.eggsAmount)}
+                            className="w-full mt-2"
+                            size="sm"
+                            disabled={gameState.balance < order.totalPrice}
+                          >
+                            <Icon name="ShoppingCart" className="mr-2" size={16} />
+                            Купить
+                          </Button>
+                        )}
+                        {order.userId === gameState.userId && (
+                          <p className="text-center text-sm text-muted-foreground mt-2">Ваше предложение</p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </Card>
             </div>
           )}
@@ -304,7 +456,7 @@ export default function Index() {
         </main>
 
         <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t-2 border-border shadow-2xl">
-          <div className="grid grid-cols-3 gap-1 p-2">
+          <div className="grid grid-cols-4 gap-1 p-2">
             <Button
               variant={activeTab === 'farm' ? 'default' : 'ghost'}
               className="h-16 flex flex-col gap-1 hover:scale-105 transition-transform"
@@ -318,8 +470,16 @@ export default function Index() {
               className="h-16 flex flex-col gap-1 hover:scale-105 transition-transform"
               onClick={() => setActiveTab('shop')}
             >
+              <Icon name="Store" size={24} />
+              <span className="text-xs">Куры</span>
+            </Button>
+            <Button
+              variant={activeTab === 'market' ? 'default' : 'ghost'}
+              className="h-16 flex flex-col gap-1 hover:scale-105 transition-transform"
+              onClick={() => setActiveTab('market')}
+            >
               <Icon name="ShoppingBag" size={24} />
-              <span className="text-xs">Магазин</span>
+              <span className="text-xs">Рынок</span>
             </Button>
             <Button
               variant={activeTab === 'wallet' ? 'default' : 'ghost'}

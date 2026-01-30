@@ -1,0 +1,22 @@
+{
+  "tests": [
+    {
+      "name": "Get marketplace orders",
+      "method": "GET",
+      "path": "/?action=list",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Create sell order",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "create",
+        "userId": "test_user_123",
+        "eggsAmount": 100,
+        "pricePerEgg": 0.01
+      },
+      "expectedStatus": 200
+    }
+  ]
+}
